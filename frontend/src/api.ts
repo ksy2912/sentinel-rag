@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
+const API_URL =
+  window.__RUNTIME_CONFIG__?.API_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8001";
 
 export type DocumentInfo = {
   id: string;

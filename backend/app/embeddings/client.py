@@ -45,7 +45,7 @@ async def embed_text(text: str) -> list[float]:
 
 async def _embed_openai(client: httpx.AsyncClient, text: str) -> list[float]:
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    payload = {"model": OPENAI_EMBED_MODEL, "input": text}
+    payload = {"model": OPENAI_EMBED_MODEL, "input": text, "dimensions": EMBEDDING_DIM}
     r = await client.post("https://api.openai.com/v1/embeddings", headers=headers, json=payload)
     r.raise_for_status()
     data = r.json()

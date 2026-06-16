@@ -13,6 +13,8 @@ def _normalize_database_url(database_url: str) -> str:
     # docker-compose uses SQLAlchemy-style URL; psycopg expects plain libpq-ish scheme.
     if database_url.startswith("postgresql+psycopg://"):
         return database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql://", 1)
     return database_url
 
 

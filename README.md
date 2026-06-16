@@ -399,9 +399,62 @@ docker compose up -d --build
 | 12 | React chat UI | Done |
 | 13 | Multi-document support + unit tests | Done |
 | 14 | One-command Docker run | Done |
+| 14 | Public deploy (Render) | See [Deploy to Render](#deploy-to-render-free) below |
 | 15 | README + architecture + hardest problems doc | Done |
 
 See [docs/HARDEST_PROBLEMS.md](docs/HARDEST_PROBLEMS.md) for detailed engineering notes on the five hardest problems encountered while building this system.
+
+---
+
+## Deploy to Render (free)
+
+Cloud deploy uses **Render** (API + React UI + Postgres/pgvector). Ollama does not run on Render free tier — use **OpenAI embeddings** in the cloud (`OPENAI_API_KEY`).
+
+### Live URLs (after deploy)
+
+| Service | URL |
+|---------|-----|
+| **Chat UI** | https://sentinel-rag-web.onrender.com |
+| **API** | https://sentinel-rag-api.onrender.com |
+| **API docs** | https://sentinel-rag-api.onrender.com/docs |
+
+> Free-tier services sleep after ~15 min idle. First request may take 30–60s to wake up.
+
+### One-time setup
+
+1. **Open Render:** https://dashboard.render.com/
+2. **Connect GitHub** (account settings → GitHub → authorize `ksy2912`)
+3. **New → Blueprint** → select repo **`ksy2912/sentinel-rag`**
+4. Render reads `render.yaml` and creates 3 resources: Postgres DB, API, Web UI
+5. When prompted, set these **secret** env vars on `sentinel-rag-api`:
+   - `OPENROUTER_API_KEY` — your OpenRouter key (for `/ask` LLM)
+   - `OPENAI_API_KEY` — OpenAI key (for embeddings in cloud; cheap)
+6. Click **Apply** and wait ~10–15 min for first build
+
+### How cloud differs from local Docker
+
+| | Local (`docker compose`) | Render (cloud) |
+|--|--------------------------|----------------|
+| Embeddings | Ollama `nomic-embed-text` | OpenAI `text-embedding-3-small` |
+| LLM | OpenRouter | OpenRouter |
+| Database | Postgres in Docker | Render managed Postgres |
+| Frontend API URL | `localhost:8001` | Set at runtime via `API_URL` env |
+
+### Verify deploy
+
+```powershell
+Invoke-RestMethod https://sentinel-rag-api.onrender.com/health
+```
+
+Then open https://sentinel-rag-web.onrender.com — upload a doc and ask a question.
+
+### Redeploy after code changes
+
+```powershell
+git push origin main
+```
+
+Render auto-redeploys on push to `main`.
 
 ---
 
