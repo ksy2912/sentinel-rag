@@ -1,0 +1,6 @@
+Intelligent RAG systems retrieve relevant context from uploaded documents.
+This sample document is meant to test the ingestion pipeline: text extraction,
+chunking, embeddings storage, and semantic retrieval.
+
+FastAPI exposes endpoints like /upload and /retrieve.
+
