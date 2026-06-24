@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-API_URL="${API_URL:-http://localhost:8001}"
+# Same-origin proxy via nginx (/api -> backend). Render sets full API URL via env.
+API_URL="${API_URL:-/api}"
 
 cat > /usr/share/nginx/html/config.js <<EOF
 window.__RUNTIME_CONFIG__ = { API_URL: "${API_URL}" };

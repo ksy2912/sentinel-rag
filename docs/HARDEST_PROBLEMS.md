@@ -1,49 +1,43 @@
 # Five Hardest Problems — Sentinel RAG
 
-Notes from building this system (Block 1, Days 1–15).
+Interview talking points from building this system.
 
 ---
 
 ## 1. Splitting LLM vs embeddings providers
 
-**Problem:** OpenRouter handles chat well, but embeddings need a separate provider (Ollama or OpenAI). Setting `ALLOW_MOCK_LLM=false` for real `/ask` calls also disabled mock embeddings, breaking `/upload` and `/retrieve`.
+**Problem:** OpenRouter handles chat well, but embeddings need a separate provider (Ollama or OpenAI). One mock flag for “LLM off” accidentally broke upload/retrieve too.
 
-**Solution:** Run Ollama as a Docker service for `nomic-embed-text` embeddings while OpenRouter powers generation and critique. Two providers, one compose stack.
+**Solution:** Ollama for `nomic-embed-text` embeddings locally; OpenRouter for generation and critique. Two providers, one Docker Compose stack. Cloud deploy uses OpenAI embeddings because Ollama isn’t available on free hosting.
 
 ---
 
-## 2. API readiness vs container "Started"
+## 2. API readiness vs container “Started”
 
-**Problem:** Docker marks the API container as started before Uvicorn finishes booting (especially after adding LangGraph). Immediate `/ask` calls failed with "connection closed unexpectedly."
+**Problem:** Docker marks the API as started before Uvicorn is ready. Early `/ask` calls failed with connection errors.
 
-**Solution:** Wait for `/health` after `docker compose up`, add an API healthcheck in compose, and document a 5–10s startup buffer.
+**Solution:** API healthcheck in `docker-compose.yml`, wait for `/health` before testing, 5–10s startup buffer documented.
 
 ---
 
 ## 3. Grounding the critic without infinite retries
 
-**Problem:** The critic can fail on vague questions or weak retrieval. Unbounded retries waste tokens and latency.
+**Problem:** The critic fails on vague questions or weak retrieval. Unbounded retries waste tokens and latency.
 
-**Solution:** LangGraph conditional edge with a fixed retry budget (`RAG_RETRY_BUDGET=2`), query rewriter node, and explicit thresholds for grounding (≥0.6) and retrieval quality (≥0.3). Return the best attempt when the budget is exhausted.
+**Solution:** LangGraph conditional edge, fixed retry budget (`RAG_RETRY_BUDGET=2`), query rewriter node, configurable grounding/retrieval thresholds. Return the best attempt when budget is exhausted.
 
 ---
 
 ## 4. Explainability without overwhelming the client
 
-**Problem:** Raw RAG responses can include many chunks, scores, and trace data — too much for a simple API consumer or chat UI.
+**Problem:** Raw RAG output can include many chunks, scores, and trace data — too much for a chat UI or API consumer.
 
-**Solution:** Structured `AskResponse` with layered fields: `answer` + `sources` (human-readable), `citations` (structured), `retrieved_chunks` (full evidence), `metrics` (scores), and optional `run_id` for observability drill-down.
+**Solution:** Layered `AskResponse`: `answer` + `sources`, structured `citations`, full `retrieved_chunks` for debugging, `metrics` for scores, optional `run_id` for trace drill-down.
 
 ---
 
 ## 5. Observability across async agent steps
 
-**Problem:** A single `/ask` runs multiple async nodes (retriever, generator, critic, maybe rewriter) — hard to debug latency or failures without per-step traces.
+**Problem:** One `/ask` runs retriever → generator → critic → (maybe) rewriter — hard to debug latency or failures without per-step traces.
 
-**Solution:** Postgres `agent_runs` + `agent_spans` tables with a `trace_node` context manager wrapping each LangGraph node. Optional Langfuse export when keys are set. `GET /traces` for analytics without opening the DB.
-
----
-
-## Bonus: pgvector dimension consistency
-
-Embedding model output must match the DB column (`vector(768)` for `nomic-embed-text`). Mismatched dimensions cause silent insert failures or bad retrieval — enforce `EMBEDDING_DIM` in config and validate in the embedding client.
+**Solution:** Postgres `agent_runs` + `agent_spans`, `trace_node` context manager on each LangGraph node, optional Langfuse export, `GET /traces` for analytics.

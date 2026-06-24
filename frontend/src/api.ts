@@ -1,75 +1,54 @@
-const API_URL =
+const API = (
   window.__RUNTIME_CONFIG__?.API_URL ||
   import.meta.env.VITE_API_URL ||
-  "http://localhost:8001";
+  "/api"
+).replace(/\/$/, "");
 
-export type DocumentInfo = {
-  id: string;
-  filename: string;
-  mime_type: string | null;
-  chunk_count: number;
-  created_at: string;
-};
-
-export type Citation = {
-  document_id: string;
-  filename: string;
-  chunk_index: number;
-  chunk_id: string;
-  similarity: number;
-};
+export type DocumentInfo = { id: string; filename: string; chunk_count: number };
 
 export type AskResponse = {
   answer: string;
   confidence: number;
   sources: string[];
-  citations: Citation[];
-  retrieved_chunks: {
-    chunk_id: string;
-    filename: string;
-    chunk_index: number;
-    chunk_text: string;
-    similarity: number;
-  }[];
   metrics: {
     grounding_score: number;
     retrieval_quality_score: number;
-    confidence: number;
     critic_passed: boolean;
     retry_count: number;
-    final_query: string;
   };
-  run_id?: string;
   total_latency_ms?: number;
 };
 
-export async function fetchDocuments(): Promise<DocumentInfo[]> {
-  const res = await fetch(`${API_URL}/documents`);
-  if (!res.ok) throw new Error("Failed to load documents");
+function url(path: string) {
+  return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url(path), init);
+  } catch {
+    throw new Error("Cannot reach API. Is the backend running?");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = err.detail;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail) || res.statusText);
+  }
   return res.json();
 }
 
-export async function uploadDocument(file: File): Promise<void> {
+export const fetchDocuments = () => request<DocumentInfo[]>("/documents");
+
+export async function uploadDocument(file: File) {
   const form = new FormData();
   form.append("file", file);
-  form.append("chunk_size", "1000");
-  form.append("chunk_overlap", "150");
-  const res = await fetch(`${API_URL}/upload`, { method: "POST", body: form });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Upload failed");
-  }
+  await request("/upload", { method: "POST", body: form });
 }
 
-export async function askQuestion(question: string, topK = 8): Promise<AskResponse> {
-  const res = await fetch(`${API_URL}/ask`, {
+export const askQuestion = (question: string) =>
+  request<AskResponse>("/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, top_k: topK }),
+    body: JSON.stringify({ question, top_k: 8 }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Ask failed");
-  }
-  return res.json();
-}

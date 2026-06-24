@@ -1,74 +1,44 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import {
-  AskResponse,
-  DocumentInfo,
-  askQuestion,
-  fetchDocuments,
-  uploadDocument,
-} from "./api";
+import { FormEvent, useEffect, useState } from "react";
+import { AskResponse, DocumentInfo, askQuestion, fetchDocuments, uploadDocument } from "./api";
 
-type ChatMessage = {
-  role: "user" | "assistant";
-  text: string;
-  response?: AskResponse;
-};
+type Message = { role: "user" | "assistant"; text: string; meta?: AskResponse };
 
 export default function App() {
   const [docs, setDocs] = useState<DocumentInfo[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const loadDocs = useCallback(async () => {
-    try {
-      setDocs(await fetchDocuments());
-    } catch {
-      setError("Could not load documents. Is the API running?");
-    }
+  useEffect(() => {
+    fetchDocuments().then(setDocs).catch(() => setError("API not reachable"));
   }, []);
 
-  useEffect(() => {
-    loadDocs();
-  }, [loadDocs]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files?.length) return;
-    setUploading(true);
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setError(null);
     try {
-      for (const file of Array.from(files)) {
-        await uploadDocument(file);
-      }
-      await loadDocs();
+      await uploadDocument(file);
+      setDocs(await fetchDocuments());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setUploading(false);
       e.target.value = "";
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const q = input.trim();
     if (!q || loading) return;
-
     setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
     setLoading(true);
     setError(null);
-
     try {
-      const response = await askQuestion(q);
-      setMessages((m) => [...m, { role: "assistant", text: response.answer, response }]);
+      const res = await askQuestion(q);
+      setMessages((m) => [...m, { role: "assistant", text: res.answer, meta: res }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -76,98 +46,43 @@ export default function App() {
     }
   }
 
+  const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
+
   return (
     <div className="layout">
       <aside className="sidebar">
         <h1>Sentinel RAG</h1>
-        <p className="subtitle">Upload docs · Ask questions · See citations</p>
-
         <label className="upload-btn">
-          {uploading ? "Uploading…" : "Upload PDF / DOCX / TXT"}
-          <input type="file" accept=".pdf,.docx,.txt" multiple hidden onChange={handleUpload} />
+          Upload PDF / DOCX / TXT
+          <input type="file" accept=".pdf,.docx,.txt" hidden onChange={onUpload} />
         </label>
-
-        <h2>Documents ({docs.length})</h2>
         <ul className="doc-list">
-          {docs.length === 0 && <li className="muted">No documents yet</li>}
           {docs.map((d) => (
-            <li key={d.id}>
-              <strong>{d.filename}</strong>
-              <span>{d.chunk_count} chunks</span>
-            </li>
+            <li key={d.id}>{d.filename} <span>({d.chunk_count})</span></li>
           ))}
         </ul>
       </aside>
 
       <main className="chat">
         <div className="messages">
-          {messages.length === 0 && (
-            <div className="empty">
-              <p>Ask a question about your uploaded documents.</p>
-              <p className="muted">Example: What endpoints does FastAPI expose?</p>
-            </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`bubble ${msg.role}`}>
-              <div className="bubble-text">{msg.text}</div>
-              {msg.response && (
+          {messages.map((m, i) => (
+            <div key={i} className={`bubble ${m.role}`}>
+              <p>{m.text}</p>
+              {m.meta && (
                 <div className="meta">
-                  <div className="scores">
-                    <span title="Confidence">Conf {(msg.response.confidence * 100).toFixed(0)}%</span>
-                    <span title="Grounding">Ground {(msg.response.metrics.grounding_score * 100).toFixed(0)}%</span>
-                    <span title="Retrieval quality">Retr {(msg.response.metrics.retrieval_quality_score * 100).toFixed(0)}%</span>
-                    <span className={msg.response.metrics.critic_passed ? "pass" : "fail"}>
-                      {msg.response.metrics.critic_passed ? "Critic ✓" : "Critic ✗"}
-                    </span>
-                    {msg.response.metrics.retry_count > 0 && (
-                      <span>Retries {msg.response.metrics.retry_count}</span>
-                    )}
-                    {msg.response.total_latency_ms != null && (
-                      <span>{msg.response.total_latency_ms}ms</span>
-                    )}
-                  </div>
-                  {msg.response.sources.length > 0 && (
-                    <div className="sources">
-                      <strong>Sources:</strong>{" "}
-                      {msg.response.sources.map((s, j) => (
-                        <code key={j}>{s}</code>
-                      ))}
-                    </div>
-                  )}
-                  {msg.response.citations.length > 0 && (
-                    <details>
-                      <summary>Citations ({msg.response.citations.length})</summary>
-                      <ul>
-                        {msg.response.citations.map((c) => (
-                          <li key={c.chunk_id}>
-                            {c.filename}#chunk_{c.chunk_index} — sim {(c.similarity * 100).toFixed(0)}%
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
+                  Conf {pct(m.meta.confidence)} · Ground {pct(m.meta.metrics.grounding_score)} ·{" "}
+                  {m.meta.metrics.critic_passed ? "✓" : "✗"}
+                  {m.meta.sources[0] && <div className="sources">{m.meta.sources.join(", ")}</div>}
                 </div>
               )}
             </div>
           ))}
-
-          {loading && <div className="bubble assistant loading">Thinking…</div>}
-          <div ref={bottomRef} />
+          {loading && <div className="bubble assistant">Thinking…</div>}
         </div>
-
-        {error && <div className="error">{error}</div>}
-
-        <form className="input-row" onSubmit={handleSubmit}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your documents…"
-            disabled={loading}
-          />
-          <button type="submit" disabled={loading || !input.trim()}>
-            Send
-          </button>
+        {error && <p className="error">{error}</p>}
+        <form className="input-row" onSubmit={onSubmit}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask a question…" disabled={loading} />
+          <button type="submit" disabled={loading || !input.trim()}>Send</button>
         </form>
       </main>
     </div>

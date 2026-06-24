@@ -119,13 +119,13 @@ def create_document(filename: str, mime_type: str | None) -> uuid.UUID:
 
 def insert_chunk_embeddings(
     document_id: uuid.UUID,
-    chunks: list[tuple[int, str, list[float]]],
+    chunks: list[tuple[int, tuple[str, list[float]]]],
 ) -> int:
     if not chunks:
         return 0
 
     with connect() as conn:
-        for chunk_index, chunk_text, embedding in chunks:
+        for chunk_index, (chunk_text, embedding) in chunks:
             chunk_id = uuid.uuid4()
             vec_literal = embedding_to_vector_literal(embedding, dim=EMBEDDING_DIM)
             conn.execute(
