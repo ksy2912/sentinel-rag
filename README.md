@@ -10,7 +10,7 @@ Multi-agent **Retrieval-Augmented Generation** system: upload documents, ask que
 
 ---
 
-## Highlights (for interviews)
+## Highlights 
 
 - **RAG pipeline** — ingest → chunk → embed → retrieve → generate with citations
 - **Multi-agent LangGraph** — Retriever → Generator → Critic → Query Rewriter (retry loop)
